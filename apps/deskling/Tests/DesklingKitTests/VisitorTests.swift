@@ -61,7 +61,7 @@ final class VisitorTests: XCTestCase {
         let listener: AgentListener
     }
 
-    private func scene(roams: Bool = false) -> Scene {
+    private func scene(roams: Bool = false, openLink: (@MainActor (URL, String) -> Void)? = nil) -> Scene {
         let settings = settings(roams: roams)
         let floor = Floor()
         let hostWindow = CharacterWindow(size: CharacterSize.medium.size)
@@ -70,7 +70,7 @@ final class VisitorTests: XCTestCase {
             visibleFrame: { self.screen }, alertFrame: { self.screen },
             cursorLocation: { self.away }, idleTime: { 0 }, floor: floor)
         let visitors = Visitors(
-            roster: roster(), settings: settings, floor: floor, host: host, alertFrame: { self.screen })
+            roster: roster(), settings: settings, floor: floor, host: host, alertFrame: { self.screen }, openLink: openLink)
         return Scene(host: host, hostWindow: hostWindow, floor: floor, visitors: visitors,
                      listener: AgentListener(performer: host, settings: settings, visitors: visitors))
     }
@@ -91,6 +91,34 @@ final class VisitorTests: XCTestCase {
         let visitor = try XCTUnwrap(scene.visitors.performer(for: "littlebear"))
         XCTAssertEqual(visitor.characterID, "polarbear")
         XCTAssertEqual(visitor.alertText, "3 Bear notes waiting")
+    }
+
+    func testClickingAVisitorOpensThePageTheAlertNamedAndSendsThemHome() {
+        var opened: [(URL, String)] = []
+        let scene = scene(openLink: { opened.append(($0, $1)) })
+        defer { scene.host.stop(); scene.visitors.dismissAll() }
+        scene.host.start()
+        scene.listener.handle(DesklingCommand(
+            .alert, text: "3 Bear notes waiting", project: "littlebear", character: "nook",
+            open: "https://kmini-home.example.ts.net:4648/#/queue")!)
+
+        scene.visitors.click("littlebear")
+
+        XCTAssertEqual(opened.map(\.0.absoluteString), ["https://kmini-home.example.ts.net:4648/#/queue"])
+        XCTAssertEqual(opened.map(\.1), ["littlebear"])
+        XCTAssertTrue(scene.visitors.visiting.isEmpty)
+    }
+
+    func testANewerAlertKeepsTheLinkUnlessItNamesAnother() {
+        var opened: [URL] = []
+        let scene = scene(openLink: { url, _ in opened.append(url) })
+        defer { scene.host.stop(); scene.visitors.dismissAll() }
+        scene.host.start()
+        scene.listener.handle(DesklingCommand(
+            .alert, text: "3 waiting", project: "littlebear", character: "nook", open: "https://a.example/")!)
+        scene.listener.handle(alert(as: "nook"))
+        scene.visitors.click("littlebear")
+        XCTAssertEqual(opened.map(\.absoluteString), ["https://a.example/"])
     }
 
     func testTheHostsOwnCharacterOrAnUnknownOneAlertsAsBefore() {

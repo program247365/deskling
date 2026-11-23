@@ -38,6 +38,22 @@ final class CommandTests: XCTestCase {
         XCTAssertNil(DesklingCommand(userInfo: ["action": "explode"]))
     }
 
+    func testAnAlertOpensOnlyAPlainWebAddress() {
+        let open = { DesklingCommand(.alert, text: "hi", project: "littlebear", open: $0)?.open?.absoluteString }
+        XCTAssertEqual(open("https://kmini-home.example.ts.net:4648/#/queue"), "https://kmini-home.example.ts.net:4648/#/queue")
+        XCTAssertEqual(open("http://127.0.0.1:4648"), "http://127.0.0.1:4648")
+        XCTAssertNil(open("file:///etc/passwd"))
+        XCTAssertNil(open("x-apple.systempreferences:com.apple.preference.security"))
+        XCTAssertNil(open("javascript:alert(1)"))
+        XCTAssertNil(open("https://user:secret@example.com/"))
+        XCTAssertNil(open("https:///no-host"))
+        XCTAssertNil(open("not a url"))
+        XCTAssertNil(DesklingCommand(.say, text: "hi", project: "api", open: "https://example.com")?.open, "only an alert opens a page")
+        let alert = DesklingCommand(.alert, text: "hi", project: "littlebear", character: "nook", open: "https://example.com:4648/")
+        XCTAssertEqual(DesklingCommand(userInfo: alert?.userInfo), alert)
+        XCTAssertNil(DesklingCommand(userInfo: ["action": "alert", "text": "hi", "project": "x", "open": "file:///tmp"])?.open)
+    }
+
     // MARK: The deskling binary
 
     private var binary: URL {
@@ -89,7 +105,28 @@ final class CommandTests: XCTestCase {
         XCTAssertEqual(try run(["act", "pet"], channel: channel).status, 1)
         XCTAssertEqual(try run(["say"], channel: channel).status, 1)
         XCTAssertEqual(try run(["alert"], channel: channel).status, 1)
+        XCTAssertEqual(try run(["alert", "hi", "--open", "file:///etc/passwd"], channel: channel).status, 1)
         XCTAssertEqual(try run([], channel: channel).status, 1)
+    }
+
+    func testAlertCarriesTheCharacterAndPageToOpen() throws {
+        let channel = "sh.kbr.deskling.tests.\(UUID().uuidString)"
+        let received = expectation(description: "command posted")
+        let observer = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(channel), object: nil, queue: .main
+        ) { notification in
+            let command = DesklingCommand(userInfo: notification.userInfo)
+            XCTAssertEqual(command?.character, "nook")
+            XCTAssertEqual(command?.open?.absoluteString, "https://kmini.example:4648/#/queue")
+            received.fulfill()
+        }
+        defer { DistributedNotificationCenter.default().removeObserver(observer) }
+
+        let result = try run(
+            ["alert", "3 notes", "--character", "nook", "--open", "https://kmini.example:4648/#/queue", "--project", "littlebear"],
+            channel: channel)
+        XCTAssertEqual(result.status, 0)
+        wait(for: [received], timeout: 3)
     }
 
     func testMCPServerListsAndCallsItsTools() throws {

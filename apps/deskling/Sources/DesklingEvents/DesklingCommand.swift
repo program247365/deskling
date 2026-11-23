@@ -24,6 +24,8 @@ public struct DesklingCommand: Equatable, Sendable {
     /// Who should bring an alert, by id or name, as in "nook": they come and stand beside the character who lives
     /// on the desktop instead of that one coming. Only sent with `alert`.
     public let character: String?
+    /// A web page clicking the alert opens, as "https://host:4648/#/queue". Only http and https, and only sent with `alert`.
+    public let open: URL?
 
     /// The agent name commands are filed under, as in "agent/api" for an alert sent from a folder named api.
     public static let agent = "agent"
@@ -38,7 +40,7 @@ public struct DesklingCommand: Equatable, Sendable {
     /// Nil when there is nothing to do: `say` with no text and no known role, `alert` with no text.
     public init?(
         _ action: Action, text: String? = nil, role: String? = nil, project: String, origin: AgentEvent.Origin? = nil,
-        character: String? = nil
+        character: String? = nil, open: String? = nil
     ) {
         let text = text.map(Self.tidy).flatMap { $0.isEmpty ? nil : $0 }
         let role = action == .say ? role?.lowercased() : nil
@@ -58,6 +60,16 @@ public struct DesklingCommand: Equatable, Sendable {
         self.origin = action == .alert ? origin : nil
         let character = character?.trimmingCharacters(in: .whitespaces).lowercased()
         self.character = action == .alert && character?.isEmpty == false ? character : nil
+        self.open = action == .alert ? Self.link(open) : nil
+    }
+
+    /// An http or https address with a host and no password in it; anything else is dropped.
+    public static func link(_ string: String?) -> URL? {
+        guard let string = string?.trimmingCharacters(in: .whitespaces), string.count <= 2048,
+              let url = URL(string: string), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              url.host?.isEmpty == false, url.user == nil, url.password == nil
+        else { return nil }
+        return url
     }
 
     /// One line, no runs of spaces, at most `longestText` characters.
@@ -77,6 +89,7 @@ public struct DesklingCommand: Equatable, Sendable {
         info["text"] = text
         info["role"] = role
         info["character"] = character
+        info["open"] = open?.absoluteString
         if let origin { info.merge(origin.userInfo) { mine, _ in mine } }
         return info
     }
@@ -86,7 +99,7 @@ public struct DesklingCommand: Equatable, Sendable {
         guard let info = userInfo, let action = (info["action"] as? String).flatMap(Action.init(rawValue:)) else { return nil }
         self.init(action, text: info["text"] as? String, role: info["role"] as? String,
                   project: info["project"] as? String ?? "", origin: AgentEvent.Origin(userInfo: info),
-                  character: info["character"] as? String)
+                  character: info["character"] as? String, open: info["open"] as? String)
     }
 
     public func post() {

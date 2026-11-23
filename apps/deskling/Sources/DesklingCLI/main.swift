@@ -10,9 +10,10 @@ let usage = """
     Usage:
       deskling say TEXT [--as ROLE]    say TEXT in a bubble, acting out ROLE if given
       deskling act ROLE [--say TEXT]   act out ROLE, saying TEXT if given
-      deskling alert TEXT [--character NAME]
+      deskling alert TEXT [--character NAME] [--open URL]
                                        come and wave with TEXT until you answer or `deskling clear`;
-                                       NAME, if given, comes instead and stands beside whoever is out
+                                       NAME, if given, comes instead and stands beside whoever is out;
+                                       URL (http or https), if given, opens when you click NAME
       deskling clear                   stop waving for the alert sent from this folder
       deskling mcp                     run as an MCP server over stdio, with the same four as tools
 
@@ -59,12 +60,13 @@ enum CommandError: Error, CustomStringConvertible {
 
 /// Posts the command, or says why it could not.
 func send(
-    _ action: DesklingCommand.Action, text: String? = nil, role: String? = nil, project: String?, character: String? = nil
+    _ action: DesklingCommand.Action, text: String? = nil, role: String? = nil, project: String?, character: String? = nil,
+    open: String? = nil
 ) -> Result<DesklingCommand, CommandError> {
     if let role, !DesklingCommand.roles.contains(role.lowercased()) { return .failure(.unknownRole(role)) }
     guard let command = DesklingCommand(
         action, text: text, role: role, project: project ?? currentFolder,
-        origin: action == .alert ? .current() : nil, character: character)
+        origin: action == .alert ? .current() : nil, character: character, open: open)
     else { return .failure(.nothingToDo(action)) }
     guard isDesklingRunning else { return .failure(.notRunning) }
     command.post()
@@ -205,7 +207,9 @@ case "act":
     sent = send(.say, text: text, role: arguments[0], project: project)
 case "alert":
     let character = option("--character", in: &arguments)
-    sent = send(.alert, text: arguments.joined(separator: " "), project: project, character: character)
+    let link = option("--open", in: &arguments)
+    if let link, DesklingCommand.link(link) == nil { fail("--open takes an http or https URL.") }
+    sent = send(.alert, text: arguments.joined(separator: " "), project: project, character: character, open: link)
 case "clear":
     guard arguments.isEmpty else { fail(usage) }
     sent = send(.clear, project: project)

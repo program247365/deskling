@@ -9,6 +9,7 @@ public final class Visitors {
     private struct Guest {
         let performer: Performer
         var origin: AgentEvent.Origin?
+        var link: URL?
     }
 
     private let roster: Roster
@@ -17,13 +18,15 @@ public final class Visitors {
     private let host: Performer
     private let makeWindow: () -> CharacterWindow
     private let alertFrame: () -> CGRect?
+    private let openLink: @MainActor (URL, String) -> Void
     /// Who is visiting, by the project that called them.
     private var guests: [String: Guest] = [:]
 
     public init(
         roster: Roster, settings: Settings, floor: Floor, host: Performer,
         makeWindow: (() -> CharacterWindow)? = nil,
-        alertFrame: @escaping () -> CGRect? = { MainActor.assumeIsolated { Performer.cursorScreenFrame() } }
+        alertFrame: @escaping () -> CGRect? = { MainActor.assumeIsolated { Performer.cursorScreenFrame() } },
+        openLink: (@MainActor (URL, String) -> Void)? = nil
     ) {
         self.roster = roster
         self.settings = settings
@@ -31,6 +34,7 @@ public final class Visitors {
         self.host = host
         self.makeWindow = makeWindow ?? { CharacterWindow(size: settings.size.size) }
         self.alertFrame = alertFrame
+        self.openLink = openLink ?? { url, project in AlertLink.open(url, for: project, settings: settings) }
     }
 
     /// The projects with someone visiting for them.
@@ -49,11 +53,12 @@ public final class Visitors {
             else { return false }
             guard settings.agentsCanSpeak, settings.alertsForAgents, host.isShown else { return true }
             if guests[command.project] != nil {
-                guests[command.project]?.origin = command.origin ?? guests[command.project]?.origin
+                if let origin = command.origin { guests[command.project]?.origin = origin }
+                if let link = command.open { guests[command.project]?.link = link }
                 guests[command.project]?.performer.alert(text)
                 return true
             }
-            arrive(character, for: command.project, saying: text, origin: command.origin)
+            arrive(character, for: command.project, saying: text, origin: command.origin, link: command.open)
             return true
         case .clear:
             dismiss(command.project)
@@ -77,17 +82,27 @@ public final class Visitors {
         for guest in guests.values { guest.performer.refresh() }
     }
 
-    private func arrive(_ character: Character, for project: String, saying text: String, origin: AgentEvent.Origin?) {
+    /// What a click on a visitor does: opens the page the alert named, else goes to whoever called them;
+    /// either way, or with nowhere to go, it means "seen it".
+    public func click(_ project: String) {
+        guard let guest = guests[project] else { return }
+        if let link = guest.link {
+            openLink(link, project)
+            dismiss(project)
+        } else if !AgentApp.goTo(guest.origin) {
+            dismiss(project)
+        }
+    }
+
+    private func arrive(
+        _ character: Character, for project: String, saying text: String, origin: AgentEvent.Origin?, link: URL?
+    ) {
         let screen = alertFrame()
         let performer = Performer(
             character: character, window: makeWindow(), settings: settings,
             visibleFrame: { screen }, alertFrame: alertFrame, floor: floor)
-        // Clicking takes you to whoever called them, where it can; otherwise it means "seen it".
-        performer.onAlertClick = { [weak self] in
-            guard let self else { return }
-            if !AgentApp.goTo(guests[project]?.origin) { dismiss(project) }
-        }
-        guests[project] = Guest(performer: performer, origin: origin)
+        performer.onAlertClick = { [weak self] in self?.click(project) }
+        guests[project] = Guest(performer: performer, origin: origin, link: link)
         performer.visit(saying: text)
     }
 }

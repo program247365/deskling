@@ -87,6 +87,12 @@ public final class Settings {
         set { defaults.set(newValue, forKey: "lastRunVersion") }
     }
 
+    /// Sites an alert may open when you click it, as "https://host:4648", added the first time you choose Always Allow.
+    public var allowedLinkSites: [String] {
+        get { defaults.stringArray(forKey: "allowedLinkSites") ?? [] }
+        set { defaults.set(newValue, forKey: "allowedLinkSites") }
+    }
+
     public var size: CharacterSize {
         get { defaults.string(forKey: "size").flatMap(CharacterSize.init(rawValue:)) ?? .medium }
         set { defaults.set(newValue.rawValue, forKey: "size") }
