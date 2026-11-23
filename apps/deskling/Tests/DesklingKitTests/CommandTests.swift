@@ -270,6 +270,28 @@ final class SpeakingTests: XCTestCase {
         XCTAssertTrue(agents.waiting.isEmpty)
     }
 
+    func testClickingAnAlertThatTakesYouSomewhereAlsoStopsWavingForIt() {
+        let settings = Settings(defaults: UserDefaults(suiteName: "clawd.tests.\(UUID().uuidString)")!)
+        let window = CharacterWindow(size: CharacterSize.medium.size)
+        let performer = Performer(
+            character: Character.clawd(directory: stagedAnimations()), window: window, settings: settings,
+            visibleFrame: { CGRect(x: 0, y: 0, width: 1440, height: 900) },
+            cursorLocation: { CGPoint(x: -5000, y: -5000) }, idleTime: { 0 })
+        defer { performer.stop() }
+        var went: [AgentEvent.Origin?] = []
+        let agents = AgentListener(performer: performer, settings: settings, goTo: { went.append($0); return true })
+        performer.start()
+        let origin = AgentEvent.Origin(processes: [42], bundleID: "com.apple.Terminal", tty: "/dev/ttys003")
+        agents.handle(DesklingCommand(.alert, text: "srv needs you", project: "srv", origin: origin)!)
+        agents.handle(DesklingCommand(.alert, text: "api needs you", project: "api", origin: origin)!, at: Date().addingTimeInterval(5))
+
+        agents.goToWaiting()
+
+        XCTAssertEqual(went, [origin])
+        XCTAssertEqual(agents.waiting.map(\.project), ["api"], "only the one you were taken to is dismissed")
+        XCTAssertEqual(performer.alertText, "api needs you")
+    }
+
     func testWordsSentWhileHeNapsWaitUntilYouAreBack() async {
         var idle = Performer.napAfter + 1
         let bubble = SpeechBubble()

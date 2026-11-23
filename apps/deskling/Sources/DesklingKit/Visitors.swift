@@ -19,6 +19,7 @@ public final class Visitors {
     private let makeWindow: () -> CharacterWindow
     private let alertFrame: () -> CGRect?
     private let openLink: @MainActor (URL, String) -> Void
+    private let goTo: @MainActor (AgentEvent.Origin?) -> Bool
     /// Who is visiting, by the project that called them.
     private var guests: [String: Guest] = [:]
 
@@ -26,8 +27,10 @@ public final class Visitors {
         roster: Roster, settings: Settings, floor: Floor, host: Performer,
         makeWindow: (() -> CharacterWindow)? = nil,
         alertFrame: @escaping () -> CGRect? = { MainActor.assumeIsolated { Performer.cursorScreenFrame() } },
-        openLink: (@MainActor (URL, String) -> Void)? = nil
+        openLink: (@MainActor (URL, String) -> Void)? = nil,
+        goTo: (@MainActor (AgentEvent.Origin?) -> Bool)? = nil
     ) {
+        self.goTo = goTo ?? { AgentApp.goTo($0) }
         self.roster = roster
         self.settings = settings
         self.floor = floor
@@ -82,16 +85,16 @@ public final class Visitors {
         for guest in guests.values { guest.performer.refresh() }
     }
 
-    /// What a click on a visitor does: opens the page the alert named, else goes to whoever called them;
-    /// either way, or with nowhere to go, it means "seen it".
+    /// What a click on a visitor does: opens the page the alert named, else goes to whoever called them.
+    /// Either way the click means "seen it", so they head home.
     public func click(_ project: String) {
         guard let guest = guests[project] else { return }
         if let link = guest.link {
             openLink(link, project)
-            dismiss(project)
-        } else if !AgentApp.goTo(guest.origin) {
-            dismiss(project)
+        } else {
+            _ = goTo(guest.origin)
         }
+        dismiss(project)
     }
 
     private func arrive(

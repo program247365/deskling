@@ -8,14 +8,17 @@ public final class AgentListener {
     private let settings: Settings
     private let visitors: Visitors?
     private let openLink: @MainActor (URL, String) -> Void
+    private let goTo: @MainActor (AgentEvent.Origin?) -> Bool
     private var desk = AgentDesk()
     private var observer: NSObjectProtocol?
     private var commandObserver: NSObjectProtocol?
 
     public init(
         performer: Performer, settings: Settings, visitors: Visitors? = nil,
-        openLink: (@MainActor (URL, String) -> Void)? = nil
+        openLink: (@MainActor (URL, String) -> Void)? = nil,
+        goTo: (@MainActor (AgentEvent.Origin?) -> Bool)? = nil
     ) {
+        self.goTo = goTo ?? { AgentApp.goTo($0) }
         self.performer = performer
         self.settings = settings
         self.visitors = visitors
@@ -62,15 +65,15 @@ public final class AgentListener {
     }
 
     /// Takes you to the agent that has waited longest: the page its alert named, else its very tab where the terminal allows.
-    /// Opening a page, or having nowhere to take you, means "seen it" and he stops waving for that one.
+    /// Either way the click means "seen it", so he stops waving for that one.
     public func goToWaiting() {
         guard let session = desk.waiting.first else { return }
         if let link = session.link {
             openLink(link, session.project)
-            dismiss(session.id)
-        } else if !AgentApp.goTo(session.origin) {
-            dismiss(session.id)
+        } else {
+            _ = goTo(session.origin)
         }
+        dismiss(session.id)
     }
 
     public func dismissAll() {

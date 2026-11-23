@@ -61,7 +61,10 @@ final class VisitorTests: XCTestCase {
         let listener: AgentListener
     }
 
-    private func scene(roams: Bool = false, openLink: (@MainActor (URL, String) -> Void)? = nil) -> Scene {
+    private func scene(
+        roams: Bool = false, openLink: (@MainActor (URL, String) -> Void)? = nil,
+        goTo: @escaping @MainActor (AgentEvent.Origin?) -> Bool = { _ in false }
+    ) -> Scene {
         let settings = settings(roams: roams)
         let floor = Floor()
         let hostWindow = CharacterWindow(size: CharacterSize.medium.size)
@@ -70,7 +73,7 @@ final class VisitorTests: XCTestCase {
             visibleFrame: { self.screen }, alertFrame: { self.screen },
             cursorLocation: { self.away }, idleTime: { 0 }, floor: floor)
         let visitors = Visitors(
-            roster: roster(), settings: settings, floor: floor, host: host, alertFrame: { self.screen }, openLink: openLink)
+            roster: roster(), settings: settings, floor: floor, host: host, alertFrame: { self.screen }, openLink: openLink, goTo: goTo)
         return Scene(host: host, hostWindow: hostWindow, floor: floor, visitors: visitors,
                      listener: AgentListener(performer: host, settings: settings, visitors: visitors))
     }
@@ -106,6 +109,20 @@ final class VisitorTests: XCTestCase {
 
         XCTAssertEqual(opened.map(\.0.absoluteString), ["https://kmini-home.example.ts.net:4648/#/queue"])
         XCTAssertEqual(opened.map(\.1), ["littlebear"])
+        XCTAssertTrue(scene.visitors.visiting.isEmpty)
+    }
+
+    func testClickingAVisitorThatTakesYouToTheirAgentAlsoSendsThemHome() {
+        var went = 0
+        let scene = scene(goTo: { _ in went += 1; return true })
+        defer { scene.host.stop(); scene.visitors.dismissAll() }
+        scene.host.start()
+        scene.listener.handle(DesklingCommand(
+            .alert, text: "srv needs you", project: "srv", origin: AgentEvent.Origin(processes: [42], bundleID: nil, tty: nil), character: "nook")!)
+
+        scene.visitors.click("srv")
+
+        XCTAssertEqual(went, 1)
         XCTAssertTrue(scene.visitors.visiting.isEmpty)
     }
 
