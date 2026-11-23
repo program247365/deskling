@@ -7,14 +7,19 @@ public final class AgentListener {
     private let performer: Performer
     private let settings: Settings
     private let visitors: Visitors?
+    private let openLink: @MainActor (URL, String) -> Void
     private var desk = AgentDesk()
     private var observer: NSObjectProtocol?
     private var commandObserver: NSObjectProtocol?
 
-    public init(performer: Performer, settings: Settings, visitors: Visitors? = nil) {
+    public init(
+        performer: Performer, settings: Settings, visitors: Visitors? = nil,
+        openLink: (@MainActor (URL, String) -> Void)? = nil
+    ) {
         self.performer = performer
         self.settings = settings
         self.visitors = visitors
+        self.openLink = openLink ?? { url, project in AlertLink.open(url, for: project, settings: settings) }
         performer.onAlertClick = { [weak self] in self?.goToWaiting() }
         observer = DistributedNotificationCenter.default().addObserver(
             forName: AgentEvent.notificationName, object: nil, queue: .main
@@ -56,11 +61,16 @@ public final class AgentListener {
         }
     }
 
-    /// Takes you to the agent that has waited longest, in its very tab where the terminal allows. If there is nowhere to take you, the click
-    /// means "seen it" and he stops waving for that one.
+    /// Takes you to the agent that has waited longest: the page its alert named, else its very tab where the terminal allows.
+    /// Opening a page, or having nowhere to take you, means "seen it" and he stops waving for that one.
     public func goToWaiting() {
         guard let session = desk.waiting.first else { return }
-        if !AgentApp.goTo(session.origin) { dismiss(session.id) }
+        if let link = session.link {
+            openLink(link, session.project)
+            dismiss(session.id)
+        } else if !AgentApp.goTo(session.origin) {
+            dismiss(session.id)
+        }
     }
 
     public func dismissAll() {

@@ -23,6 +23,8 @@ public struct WaitingSession: Equatable, Identifiable {
     public var origin: AgentEvent.Origin? = nil
     /// What the agent asked him to say, for an alert sent with `deskling alert`.
     public var message: String? = nil
+    /// The page clicking him opens, for an alert sent with `deskling alert --open`.
+    public var link: URL? = nil
 
     /// "Claude Code", "Codex", or the agent's own name.
     public var agentName: String {
@@ -122,11 +124,12 @@ public struct AgentDesk {
             guard speaks, alerts, let text = command.text else { return [] }
             if let index = waiting.firstIndex(where: { $0.id == key }) {
                 waiting[index].message = text
-                waiting[index].origin = command.origin ?? waiting[index].origin
+                if let origin = command.origin { waiting[index].origin = origin }
+                if let link = command.open { waiting[index].link = link }
             } else {
                 waiting.append(WaitingSession(
                     id: key, agent: DesklingCommand.agent, project: command.project, since: now,
-                    origin: command.origin, message: text))
+                    origin: command.origin, message: text, link: command.open))
             }
             return [.alert(alertMessage)]
         case .clear:

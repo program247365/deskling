@@ -13,7 +13,7 @@ let usage = """
       deskling alert TEXT [--character NAME] [--open URL]
                                        come and wave with TEXT until you answer or `deskling clear`;
                                        NAME, if given, comes instead and stands beside whoever is out;
-                                       URL (http or https), if given, opens when you click NAME
+                                       URL (http or https), if given, opens when you click them
       deskling clear                   stop waving for the alert sent from this folder
       deskling mcp                     run as an MCP server over stdio, with the same four as tools
 

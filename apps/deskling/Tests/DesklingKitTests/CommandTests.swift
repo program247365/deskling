@@ -247,6 +247,29 @@ final class SpeakingTests: XCTestCase {
         XCTAssertTrue(said)
     }
 
+    func testClickingAPlainAlertOpensItsPageAndStopsWavingForIt() {
+        let settings = Settings(defaults: UserDefaults(suiteName: "clawd.tests.\(UUID().uuidString)")!)
+        let window = CharacterWindow(size: CharacterSize.medium.size)
+        let performer = Performer(
+            character: Character.clawd(directory: stagedAnimations()), window: window, settings: settings,
+            visibleFrame: { CGRect(x: 0, y: 0, width: 1440, height: 900) },
+            cursorLocation: { CGPoint(x: -5000, y: -5000) }, idleTime: { 0 })
+        defer { performer.stop() }
+        var opened: [(URL, String)] = []
+        let agents = AgentListener(performer: performer, settings: settings, openLink: { opened.append(($0, $1)) })
+        performer.start()
+
+        agents.handle(DesklingCommand(.alert, text: "3 notes waiting", project: "littlebear", open: "https://kmini.example:4648/#/queue")!)
+        agents.handle(DesklingCommand(.alert, text: "3 notes waiting", project: "littlebear")!, at: Date().addingTimeInterval(5))
+        XCTAssertEqual(agents.waiting.first?.link?.absoluteString, "https://kmini.example:4648/#/queue", "a later alert keeps the page")
+
+        agents.goToWaiting()
+
+        XCTAssertEqual(opened.map(\.0.absoluteString), ["https://kmini.example:4648/#/queue"])
+        XCTAssertEqual(opened.map(\.1), ["littlebear"])
+        XCTAssertTrue(agents.waiting.isEmpty)
+    }
+
     func testWordsSentWhileHeNapsWaitUntilYouAreBack() async {
         var idle = Performer.napAfter + 1
         let bubble = SpeechBubble()
