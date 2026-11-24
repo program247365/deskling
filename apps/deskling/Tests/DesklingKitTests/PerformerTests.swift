@@ -53,6 +53,63 @@ final class PerformerTests: XCTestCase {
         XCTAssertFalse(window.isVisible)
     }
 
+    func testBeamUpPutsTheLightAtTheMiddleAndLeavesHimHidden() async {
+        // The real screen where there is one: leaving it is what once stalled the lift, and the light never went out.
+        let screen = NSScreen.screens.first?.visibleFrame ?? self.screen
+        let window = CharacterWindow(size: CharacterSize.medium.size)
+        let performer = Performer(
+            character: Character.clawd(directory: stagedAnimations()), window: window, settings: settings(),
+            visibleFrame: { screen }, cursorLocation: { CGPoint(x: -5000, y: -5000) }, idleTime: { 0 })
+        defer { performer.stop() }
+        performer.start()
+
+        performer.beamUp()
+        XCTAssertTrue(performer.isRunning, "the menubar icon stays solid until he has actually gone")
+        XCTAssertTrue(performer.isLeaving)
+
+        // He started at the left edge, so he pops over and walks the last steps to the middle.
+        let reachedTheLight = await eventually(within: 8) { abs(window.frame.midX - screen.midX) < 1 }
+        XCTAssertTrue(reachedTheLight)
+        XCTAssertEqual(window.frame.minY, screen.minY, "he walks in along the floor")
+
+        let gone = await eventually(within: 12) { !performer.isRunning }
+        XCTAssertTrue(gone)
+        XCTAssertFalse(performer.isLeaving)
+        XCTAssertFalse(window.isVisible)
+    }
+
+    func testShowDuringTheExitCallsItOff() async {
+        let window = CharacterWindow(size: CharacterSize.medium.size)
+        let performer = Performer(
+            character: Character.clawd(directory: stagedAnimations()), window: window, settings: settings(),
+            visibleFrame: { self.screen }, cursorLocation: { CGPoint(x: -5000, y: -5000) }, idleTime: { 0 })
+        defer { performer.stop() }
+        performer.start()
+        performer.beamUp()
+        try? await Task.sleep(for: .milliseconds(600))
+
+        performer.start()
+
+        XCTAssertFalse(performer.isLeaving)
+        XCTAssertTrue(performer.isRunning)
+        XCTAssertTrue(window.isVisible)
+        XCTAssertEqual(window.opacity, 1)
+        XCTAssertEqual(window.frame.minY, screen.minY)
+        // He is still there well after the exit would have finished.
+        try? await Task.sleep(for: .seconds(1))
+        XCTAssertTrue(performer.isRunning)
+    }
+
+    func testBeamUpWhileHiddenDoesNothing() {
+        let window = CharacterWindow(size: CharacterSize.medium.size)
+        let performer = Performer(
+            character: Character.clawd(directory: stagedAnimations()), window: window, settings: settings(),
+            visibleFrame: { self.screen })
+        performer.beamUp()
+        XCTAssertFalse(performer.isLeaving)
+        XCTAssertFalse(window.isVisible)
+    }
+
     private func settings() -> Settings {
         Settings(defaults: UserDefaults(suiteName: "clawd.tests.\(UUID().uuidString)")!)
     }

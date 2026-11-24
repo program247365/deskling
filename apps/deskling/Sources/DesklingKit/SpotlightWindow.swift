@@ -50,6 +50,11 @@ public final class SpotlightWindow {
     private let panel: NSPanel
 
     public init(frame: CGRect) {
+        // The stage stops under the menubar, but a lamp hangs from the very top of the screen.
+        var frame = frame
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }) {
+            frame.size.height = screen.frame.maxY - frame.minY
+        }
         panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear

@@ -90,6 +90,23 @@ final class ChoreographyTests: XCTestCase {
         XCTAssertEqual(Choreography.drop(from: 900, to: 12, elapsed: 3600).y, 12)
     }
 
+    func testRiseIsTheDropPlayedBackwards() {
+        let start = Choreography.rise(from: 12, to: 900, elapsed: 0)
+        XCTAssertEqual(start.y, 12)
+        XCTAssertFalse(start.gone)
+        // As far up from the floor as the drop is down from the top, at every moment.
+        let rise = Choreography.rise(from: 12, to: 900, elapsed: 0.3)
+        let drop = Choreography.drop(from: 900, to: 12, elapsed: 0.3)
+        XCTAssertEqual(rise.y - 12, 900 - drop.y, accuracy: 0.001)
+        XCTAssertFalse(rise.gone)
+    }
+
+    func testRiseStopsAtTheTopAndStaysThere() {
+        let gone = Choreography.rise(from: 12, to: 900, elapsed: 5)
+        XCTAssertEqual(gone.y, 900)
+        XCTAssertTrue(gone.gone)
+    }
+
     func testDropFromBelowTheFloorLandsAtOnce() {
         let drop = Choreography.drop(from: 5, to: 40, elapsed: 0)
         XCTAssertEqual(drop.y, 40)

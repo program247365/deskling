@@ -44,7 +44,7 @@ private final class Ticker: NSObject {
 @MainActor
 public final class Performer {
     private enum Mode {
-        case idle, entrance, routine, watching, reacting, alerting, napping, announcing
+        case idle, entrance, routine, watching, reacting, alerting, napping, announcing, leaving
     }
 
     /// Something to tell you that is not about an agent, such as an update. He says each line in turn
@@ -90,7 +90,7 @@ public final class Performer {
     private var facing: Facing = .right
     /// False while a teleport has him somewhere above the floor.
     private var onFloor = true
-    /// Exists only during the launch entrance.
+    /// Exists only during the launch entrance and the exit from the menu's Hide.
     private var spotlight: SpotlightWindow?
     /// Whether the user wants him shown. A loop may not exist yet, for example with no screen attached.
     private var wantsVisible = false {
@@ -180,6 +180,9 @@ public final class Performer {
     /// True from `start()` until `stop()`, whether or not there is a screen to show him on yet.
     public var isRunning: Bool { wantsVisible }
 
+    /// True while he makes his exit after `beamUp()`: still on screen, but on his way out.
+    public var isLeaving: Bool { mode == .leaving }
+
     public var characterName: String { character.name }
 
     public var characterID: String { character.id }
@@ -189,6 +192,8 @@ public final class Performer {
     public func start(entrance: Bool = false) {
         wantsVisible = true
         startCursorWatch()
+        // Asked back while on his way out: he stays, wherever on the floor he had got to.
+        if mode == .leaving { cancelLoop() }
         guard loop == nil, let stage = placeOnFloor() else { return }
         if entrance {
             // Above the screen before the window appears, so he is never seen standing on the floor first.
@@ -212,6 +217,8 @@ public final class Performer {
 
     /// Call when the screen layout or the size setting changes.
     public func refresh() {
+        // The screen changed under his exit: he is simply gone.
+        if mode == .leaving { stop() }
         cancelLoop()
         if wantsVisible { start() } else { placeOnFloor() }
     }
@@ -281,7 +288,7 @@ public final class Performer {
         alertText = text
         switch mode {
         case .alerting: say(text)
-        case .idle, .entrance: break // picked up when the routine would start
+        case .idle, .entrance, .leaving: break // picked up when the routine would start
         default: interrupt(as: .alerting) { _, _ in }
         }
     }
@@ -806,6 +813,67 @@ public final class Performer {
         await window.play(waving)
         if Task.isCancelled { return }
         window.pose(walking, frame: character.standingFrame)
+        await spotlight.fadeOut()
+        self.spotlight = nil
+    }
+
+    /// Hides him the way he arrived, played backwards: the spotlight comes on at the middle of the floor,
+    /// he walks into it, waves goodbye, and is lifted off the top of the screen before the light goes out.
+    /// `start()` part-way through calls it off.
+    public func beamUp() {
+        guard wantsVisible, mode != .leaving else { return }
+        guard loop != nil, stage != nil, let walking = loadWalking() else { return stop() }
+        cancelLoop()
+        mode = .leaving
+        loop = Task { [weak self] in
+            guard let self else { return }
+            await returnToFloor()
+            guard !Task.isCancelled, let stage = self.stage else { return }
+            await exit(on: stage, with: walking)
+            if !Task.isCancelled { stop() }
+        }
+    }
+
+    private func exit(on stage: Stage, with walking: CharacterAnimation) async {
+        let centre = stage.maxX / 2
+        let spotlight = SpotlightWindow(frame: stage.spotlightFrame(x: centre))
+        self.spotlight = spotlight
+        spotlight.fadeIn()
+
+        // From further off he pops over to the edge of the light, so the walk in is always a few steps.
+        let approach = stage.size.width * Stage.exitApproachFactor
+        if abs(offset - centre) > approach {
+            await window.pop(visible: false)
+            if Task.isCancelled { return }
+            offset = min(max(offset < centre ? centre - approach : centre + approach, 0), stage.maxX)
+            moveTo(stage.floorOrigin(x: offset))
+            face(offset < centre ? .right : .left)
+            standStill()
+            await window.pop(visible: true)
+            if Task.isCancelled { return }
+        }
+        await walk(to: centre, on: stage, with: walking)
+        if Task.isCancelled { return }
+
+        face(.right)
+        if let waving = catalog.load("waving") { await window.play(waving) }
+        if Task.isCancelled { return }
+        standStill()
+
+        let floor = stage.floorOrigin(x: offset)
+        // No further than where the entrance begins: the ticks that move him stop once his window is off the screen.
+        let gone = stage.entranceOrigin(x: offset).y
+        var rising: TimeInterval = 0
+        onFloor = false
+        await ticker.run(on: window) { [weak self] elapsed in
+            guard let self else { return true }
+            rising += min(max(elapsed, 0), Choreography.maxStep)
+            let rise = Choreography.rise(from: floor.y, to: gone, elapsed: rising)
+            moveTo(CGPoint(x: floor.x, y: rise.y))
+            return rise.gone
+        }
+        if Task.isCancelled { return }
+        window.hide()
         await spotlight.fadeOut()
         self.spotlight = nil
     }

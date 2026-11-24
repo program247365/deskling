@@ -46,6 +46,9 @@ public struct Stage: Equatable {
     /// How wide the entrance spotlight is where it meets the floor, in Clawd-widths.
     public static let spotlightWidthFactor: CGFloat = 1.5
 
+    /// How far from the middle of the spotlight his walk into it begins when he leaves, in Clawd-widths.
+    public static let exitApproachFactor: CGFloat = 0.75
+
     /// The entrance spotlight: a column from the floor to the top of the usable area, centred on him.
     public func spotlightFrame(x offset: CGFloat) -> CGRect {
         let width = size.width * Self.spotlightWidthFactor

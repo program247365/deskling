@@ -38,6 +38,13 @@ public enum Choreography {
         return y <= floor ? (floor, true) : (y, false)
     }
 
+    /// The fall played backwards, for his exit: where a lift from `floor` toward `top` has got to after `elapsed` seconds.
+    public static func rise(from floor: CGFloat, to top: CGFloat, elapsed: TimeInterval) -> (y: CGFloat, gone: Bool) {
+        let seconds = CGFloat(max(elapsed, 0))
+        let y = floor + 0.5 * gravity * seconds * seconds
+        return y >= top ? (top, true) : (y, false)
+    }
+
     public static func plays(forFrameCount frameCount: Int) -> Int {
         frameCount < shortActFrames ? 2 : 1
     }

@@ -97,7 +97,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     /// Titles and check marks are read from the real state each time the menu opens.
     func menuNeedsUpdate(_ menu: NSMenu) {
         let name = performer.characterName
-        visibilityItem.title = performer.isRunning ? "Hide \(name)" : "Show \(name)"
+        visibilityItem.title = performer.isRunning && !performer.isLeaving ? "Hide \(name)" : "Show \(name)"
         showWaiting(in: menu)
         let current = roster.character(id: settings.characterID).id
         for (id, item) in characterItems { item.state = id == current ? .on : .off }
@@ -106,7 +106,8 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggleVisibility() {
-        if performer.isRunning { performer.stop() } else { performer.start() }
+        // Show while he is on his way out calls the exit off.
+        if performer.isRunning, !performer.isLeaving { performer.beamUp() } else { performer.start() }
     }
 
     @objc private func chooseSize(_ item: NSMenuItem) {
