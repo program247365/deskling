@@ -188,7 +188,7 @@ public final class Performer {
     public var characterID: String { character.id }
 
     /// Places him on the floor and begins the routine. Does nothing if already running.
-    /// With `entrance`, he first drops in from the top of the screen, waving. That is for launch only.
+    /// With `entrance`, he first drops in from the top of the screen, waving: at launch, and when shown from the menu.
     public func start(entrance: Bool = false) {
         wantsVisible = true
         startCursorWatch()

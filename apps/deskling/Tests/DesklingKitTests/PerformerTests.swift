@@ -100,6 +100,25 @@ final class PerformerTests: XCTestCase {
         XCTAssertTrue(performer.isRunning)
     }
 
+    func testShownAgainWithAnEntranceHeDropsInAtTheMiddle() async {
+        let window = CharacterWindow(size: CharacterSize.medium.size)
+        let performer = Performer(
+            character: Character.clawd(directory: stagedAnimations()), window: window, settings: settings(),
+            visibleFrame: { self.screen }, cursorLocation: { CGPoint(x: -5000, y: -5000) }, idleTime: { 0 })
+        defer { performer.stop() }
+        performer.start()
+        performer.stop()
+
+        performer.start(entrance: true)
+
+        XCTAssertTrue(window.isVisible)
+        XCTAssertEqual(window.frame.midX, screen.midX, accuracy: 1)
+        XCTAssertGreaterThan(window.frame.minY, screen.minY, "he starts above the floor, not standing on it")
+        let landed = await eventually { window.frame.minY == self.screen.minY }
+        XCTAssertTrue(landed)
+        XCTAssertEqual(window.frame.midX, screen.midX, accuracy: 1)
+    }
+
     func testBeamUpWhileHiddenDoesNothing() {
         let window = CharacterWindow(size: CharacterSize.medium.size)
         let performer = Performer(

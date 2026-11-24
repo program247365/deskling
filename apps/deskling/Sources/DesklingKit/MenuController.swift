@@ -106,8 +106,15 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggleVisibility() {
-        // Show while he is on his way out calls the exit off.
-        if performer.isRunning, !performer.isLeaving { performer.beamUp() } else { performer.start() }
+        if performer.isLeaving {
+            // Show while he is on his way out calls the exit off.
+            performer.start()
+        } else if performer.isRunning {
+            performer.beamUp()
+        } else {
+            // He comes back the way he left: down through the spotlight.
+            performer.start(entrance: true)
+        }
     }
 
     @objc private func chooseSize(_ item: NSMenuItem) {
