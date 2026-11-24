@@ -34,6 +34,51 @@ enum MenuIcon {
         return icon
     }
 
+    /// Rim thickness of the hidden icon, in pixels at 2x (1pt).
+    static let rimWidth = 2
+
+    /// The same icon with only its rim left, shown while the character is hidden.
+    static func hollow(_ icon: NSImage) -> NSImage? {
+        let width = Int(icon.size.width * 2), height = Int(icon.size.height * 2)
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = data.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+            icon.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
+            NSGraphicsContext.restoreGraphicsState()
+            return true
+        }
+        guard drawn else { return nil }
+
+        let opaque = { (x: Int, y: Int) in
+            x >= 0 && y >= 0 && x < width && y < height && data[(y * width + x) * 4 + 3] > 127
+        }
+        // A pixel stays when it is opaque and within the rim of a transparent pixel or the edge.
+        var rim = [UInt8](repeating: 0, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width where opaque(x, y) {
+                let nearEmpty = (-rimWidth...rimWidth).contains { dy in
+                    (-rimWidth...rimWidth).contains { dx in !opaque(x + dx, y + dy) }
+                }
+                if nearEmpty { rim[(y * width + x) * 4 + 3] = 255 }
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(rim) as CFData),
+              let image = CGImage(
+                width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+        else { return nil }
+        let hollow = NSImage(cgImage: image, size: icon.size)
+        hollow.isTemplate = true
+        return hollow
+    }
+
     /// The art pixels (sampled at each 10 x 10 block's centre) that are opaque and not a hole color,
     /// cropped to the figure. Rows run top to bottom.
     static func silhouette(of image: CGImage, holes: [(Int, Int, Int)]) -> [[Bool]]? {

@@ -447,6 +447,27 @@ final class SelectScreenTests: XCTestCase {
         }
     }
 
+    func testHiddenIconIsAnOutlineOfTheShownOne() throws {
+        for character in roster().characters {
+            let icon = try XCTUnwrap(MenuIcon.make(for: character), character.id)
+            let hollow = try XCTUnwrap(MenuIcon.hollow(icon), character.id)
+            XCTAssertEqual(hollow.size, icon.size, character.id)
+            XCTAssertTrue(hollow.isTemplate, character.id)
+            let solid = opaquePixels(icon), rim = opaquePixels(hollow)
+            XCTAssertGreaterThan(rim, 0, character.id)
+            XCTAssertLessThan(rim, solid, "\(character.id): the middle is cut out")
+        }
+    }
+
+    private func opaquePixels(_ image: NSImage) -> Int {
+        let rep = NSBitmapImageRep(data: image.tiffRepresentation!)!
+        var count = 0
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 { count += 1 }
+        }
+        return count
+    }
+
     /// Writes .build/select-screen.png and .build/menu-icons.png to look at.
     func testWritesSelectScreenAndIcons() throws {
         let characters = roster().characters
@@ -460,11 +481,14 @@ final class SelectScreenTests: XCTestCase {
         try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
             .write(to: build.appendingPathComponent("select-screen.png"))
 
+        // Shown icons on the top row, hidden ones beneath.
         let icons = characters.compactMap { MenuIcon.make(for: $0) }
-        let strip = NSImage(size: NSSize(width: icons.count * 40, height: 24), flipped: false) { _ in
-            NSColor.white.setFill(); NSRect(x: 0, y: 0, width: icons.count * 40, height: 24).fill()
+        let hollows = icons.map { MenuIcon.hollow($0) }
+        let strip = NSImage(size: NSSize(width: icons.count * 40, height: 48), flipped: false) { _ in
+            NSColor.white.setFill(); NSRect(x: 0, y: 0, width: icons.count * 40, height: 48).fill()
             for (index, icon) in icons.enumerated() {
-                icon.draw(in: NSRect(x: CGFloat(index * 40) + 4, y: 3, width: icon.size.width, height: icon.size.height))
+                icon.draw(in: NSRect(x: CGFloat(index * 40) + 4, y: 27, width: icon.size.width, height: icon.size.height))
+                hollows[index]?.draw(in: NSRect(x: CGFloat(index * 40) + 4, y: 3, width: icon.size.width, height: icon.size.height))
             }
             return true
         }

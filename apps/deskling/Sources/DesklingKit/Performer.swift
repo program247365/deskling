@@ -93,7 +93,11 @@ public final class Performer {
     /// Exists only during the launch entrance.
     private var spotlight: SpotlightWindow?
     /// Whether the user wants him shown. A loop may not exist yet, for example with no screen attached.
-    private var wantsVisible = false
+    private var wantsVisible = false {
+        didSet { if wantsVisible != oldValue { onShownChange?() } }
+    }
+    /// Called when he is shown or hidden, so the menubar icon can follow.
+    public var onShownChange: (() -> Void)?
     /// After the entrance his first move is a walk from where he landed, never a teleport.
     private var mustWalkNext = false
     /// What he is telling you while an agent waits on you; he keeps waving until it is cleared.

@@ -19,6 +19,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     private let visibilityItem = NSMenuItem(title: "", action: #selector(toggleVisibility), keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
     private var sizeItems: [CharacterSize: NSMenuItem] = [:]
+    private var icons: (shown: NSImage?, hidden: NSImage?) = (nil, nil)
 
     init(performer: Performer, settings: Settings, roster: Roster, agents: AgentListener,
          picker: CharacterPickerWindowController, updater: Updater?) {
@@ -33,6 +34,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         super.init()
 
         showIcon(for: roster.character(id: settings.characterID))
+        performer.onShownChange = { [weak self] in self?.refreshIcon() }
 
         let menu = NSMenu()
         menu.delegate = self
@@ -81,9 +83,15 @@ final class MenuController: NSObject, NSMenuDelegate {
         let icon = character.id == Character.clawdID
             ? Bundle.main.image(forResource: "MenuIcon").map { $0.isTemplate = true; return $0 }
             : MenuIcon.make(for: character)
-        statusItem.button?.image = icon
+        icons = (icon, icon.flatMap(MenuIcon.hollow))
         statusItem.button?.title = icon == nil ? character.name : ""
         statusItem.button?.setAccessibilityLabel(character.name)
+        refreshIcon()
+    }
+
+    /// Solid while the character is on the desktop, a hollow outline while hidden.
+    private func refreshIcon() {
+        statusItem.button?.image = performer.isRunning ? icons.shown : icons.hidden ?? icons.shown
     }
 
     /// Titles and check marks are read from the real state each time the menu opens.
